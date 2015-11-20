@@ -713,6 +713,11 @@ static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
  	#endif
 	return 0;
 }
+#ifdef CONFIG_FB_RK_UMP
+int (*disp_get_ump_secure_id) (struct fb_info *info, struct rk_fb_inf *g_fbi,unsigned long arg, int buf);
+EXPORT_SYMBOL(disp_get_ump_secure_id);
+#endif
+
 static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 {
 	struct fb_fix_screeninfo *fix = &info->fix;
@@ -730,7 +735,11 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 	int num_buf; //buffer_number
 	int ret;
 	void __user *argp = (void __user *)arg;
-	
+
+#ifdef CONFIG_FB_RK_UMP
+	int secure_id_buf_num = 0;
+#endif
+
 	switch(cmd)
 	{
  		case FBIOPUT_FBPHYADD:
@@ -795,6 +804,22 @@ static int rk_fb_ioctl(struct fb_info *info, unsigned int cmd,unsigned long arg)
 		#endif 
 	#endif
 			break;
+
+#ifdef CONFIG_FB_RK_UMP
+		case GET_UMP_SECURE_ID_BUF2:	/* flow trough */
+			secure_id_buf_num++;
+		case GET_UMP_SECURE_ID_BUF1:	/* flow trough */
+			secure_id_buf_num++;
+		case GET_UMP_SECURE_ID_RK_FB:
+		{
+			printk("22222222%d\n",secure_id_buf_num);
+			struct rk_fb_inf *inf = dev_get_drvdata(info->device);
+			if (disp_get_ump_secure_id)
+				return disp_get_ump_secure_id(info, inf, arg,secure_id_buf_num);
+			else
+				return -ENOTSUPP;
+		}
+#endif
         	default:
 			dev_drv->ioctl(dev_drv,cmd,arg,layer_id);
             		break;
@@ -1869,7 +1894,11 @@ static void fb_show_bmp_logo(struct fb_info *info, int rotate)
 	int i;
 	unsigned int Needwidth=(*(src-24)<<8)|(*(src-23));
 	unsigned int Needheight=(*(src-22)<<8)|(*(src-21));
-		
+
+	if (info->var.xres > bmp_logo->width)
+		dst += ((info->var.xres - bmp_logo->width) / 2) * 2;
+	if (info->var.yres > bmp_logo->height)
+		dst += ((info->var.yres - bmp_logo->height) / 2) * info->var.xres * 4;
 	for(i=0;i<Needheight;i++)
 		memcpy(dst+info->var.xres*i*4, src+bmp_logo->width*i*4, Needwidth*4);
 	
@@ -2152,7 +2181,13 @@ static struct platform_driver rk_fb_driver = {
 };
 
 static int __init rk_fb_init(void)
-{
+{	
+	request_module("ump");
+	request_module("disp_ump");
+	request_module("drm");
+	request_module("mali");
+	request_module("mali_drm");
+	printk("11111111111\r\n");
     return platform_driver_register(&rk_fb_driver);
 }
 
